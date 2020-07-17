@@ -67,6 +67,11 @@ extern const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault;
 /// 区的装饰视图对应的注册kind（identity）
 - (NSString *)ZBSimpleCollectionViewLayoutDecorationKindAtSection:(NSInteger)section;
 
+/// 区头是否悬浮顶部
+- (BOOL)ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:(NSInteger)section;
+/// 区头悬浮顶部的偏移量
+- (CGFloat)ZBSimpleCollectionViewLayoutHeaderPinToTopOffsetAtSection:(NSInteger)section;
+
 @end
 
 @interface ZBSimpleCollectionViewLayout : UICollectionViewLayout
