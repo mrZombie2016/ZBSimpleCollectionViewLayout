@@ -135,6 +135,9 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
 
 - (BOOL)shouldInvalidateLayoutForBoundsChange:(CGRect)newBound
 {
+    if (!self.delegate || ![self.delegate respondsToSelector:@selector(ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:)]) {
+        return NO;
+    }
     for (UICollectionViewLayoutAttributes * attributes in _sectionAttributes) {
         if ([self ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:attributes.indexPath.section]) {
             return YES;
