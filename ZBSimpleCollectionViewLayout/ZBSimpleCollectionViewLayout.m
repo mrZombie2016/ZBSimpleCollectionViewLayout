@@ -2,7 +2,7 @@
 //  IndexCollectionViewLayout.m
 //  YinTongStore
 //
-//  Created by 蓝禾 on 2019/12/2.
+//  Created by Zombie on 2019/12/2.
 //  Copyright © 2019 Zombie. All rights reserved.
 //
 
