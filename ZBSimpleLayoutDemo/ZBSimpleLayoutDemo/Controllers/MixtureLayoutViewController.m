@@ -165,6 +165,7 @@ static NSString * const kDecorationID = @"kDecorationID";
     return kDecorationID;
 }
 
+
 - (MixtureLayoutDataManager *)dataManager {
     if (!_dataManager) {
         _dataManager = [[MixtureLayoutDataManager alloc]init];

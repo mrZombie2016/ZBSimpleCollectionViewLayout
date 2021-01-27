@@ -20,13 +20,18 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
 
 @interface ZBSimpleCollectionViewLayout ()
 
-@property (nonatomic, strong) NSMutableArray * attributes;
+@property (nonatomic, strong) NSMutableArray <__kindof UICollectionViewLayoutAttributes *>* attributes;
 @property (nonatomic, assign) CGFloat calculateHeight;
 @property (nonatomic, assign) CGFloat calculateWidth;
 /// 保存瀑布流列高度
 @property (nonatomic, strong) NSMutableDictionary * fallsDictionary;
 /// 最后一区row数量
 @property (nonatomic, assign) NSInteger lastSectionRowNumber;
+
+/// 保存区头布局
+@property (nonatomic, strong) NSMutableArray <__kindof UICollectionViewLayoutAttributes *>* sectionAttributes;
+/// 保存区头初始默认的y坐标
+@property (nonatomic, strong) NSMutableDictionary * sectionDefaultYs;
 
 @end
 
@@ -39,8 +44,20 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
         _calculateHeight = 0;
         _calculateWidth = 0;
         _lastSectionRowNumber = 0;
+        
+        _sectionAttributes = [[NSMutableArray alloc]init];
+        _sectionDefaultYs = [[NSMutableDictionary alloc]init];
     }
     return self;
+}
+
+- (void)resetLayoutData {
+    [_attributes removeAllObjects];
+    [_fallsDictionary removeAllObjects];
+    [_sectionAttributes removeAllObjects];
+    [_sectionDefaultYs removeAllObjects];
+    _calculateHeight = 0;
+    _calculateWidth = CGRectGetWidth(self.collectionView.frame) - self.collectionView.contentInset.left - self.collectionView.contentInset.right;
 }
 
 - (void)prepareLayout {
@@ -49,6 +66,7 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
     
     NSInteger sectionNumber = [self.collectionView numberOfSections];
     if (sectionNumber <= 0) {
+        [self resetLayoutData];
         return;
     }
     
@@ -57,10 +75,7 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
     }
     
     
-    [_attributes removeAllObjects];
-    [_fallsDictionary removeAllObjects];
-    _calculateHeight = 0;
-    _calculateWidth = CGRectGetWidth(self.collectionView.frame) - self.collectionView.contentInset.left - self.collectionView.contentInset.right;
+    [self resetLayoutData];
         
     for (NSInteger section = 0; section < sectionNumber; section ++) {
         NSInteger rowNumber = [self.collectionView numberOfItemsInSection:section];
@@ -69,6 +84,7 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
         UICollectionViewLayoutAttributes * supplementaryAttr = [self layoutAttributesForSupplementaryViewOfKind:UICollectionElementKindSectionHeader atIndexPath:sIndexPath];
         if (supplementaryAttr) {
             [_attributes addObject:supplementaryAttr];
+            [_sectionAttributes addObject:supplementaryAttr];
         }
         
         NSString * decoration = [self ZBSimpleCollectionViewLayoutDecorationKindAtSection:section];
@@ -120,6 +136,19 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
 
 - (nullable NSArray<__kindof UICollectionViewLayoutAttributes *> *)layoutAttributesForElementsInRect:(CGRect)rect{
      return _attributes;
+}
+
+- (BOOL)shouldInvalidateLayoutForBoundsChange:(CGRect)newBound
+{
+    if (!self.delegate || ![self.delegate respondsToSelector:@selector(ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:)]) {
+        return NO;
+    }
+    for (UICollectionViewLayoutAttributes * attributes in _sectionAttributes) {
+        if ([self ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:attributes.indexPath.section]) {
+            return YES;
+        }
+    }
+    return NO;
 }
 
 - (BOOL)addAttributes {
@@ -321,9 +350,36 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
     }
         
     UICollectionViewLayoutAttributes * supplementaryAttributes = [UICollectionViewLayoutAttributes layoutAttributesForSupplementaryViewOfKind:elementKind withIndexPath:indexPath];
-    supplementaryAttributes.frame = CGRectMake(0, _calculateHeight, size.width, size.height);
     
+    supplementaryAttributes.zIndex = 0;
+    
+    //判断是否悬浮
+    BOOL pinToTop = [self ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:indexPath.section];
+    if (pinToTop) {
+        CGFloat offset = [self ZBSimpleCollectionViewLayoutHeaderPinToTopOffsetAtSection:indexPath.section];
+        if (self.collectionView.contentOffset.y + offset >= _calculateHeight) {
+
+            supplementaryAttributes.zIndex = 1;
+            supplementaryAttributes.frame = CGRectMake(0, self.collectionView.contentOffset.y + offset, size.width, size.height);
+        } else {
+            supplementaryAttributes.frame = CGRectMake(0, MAX(_calculateHeight, supplementaryAttributes.frame.origin.y), size.width, size.height);
+            
+        }
+        UICollectionViewLayoutAttributes * lastSectionAttributes = _sectionAttributes.lastObject;
+        if (lastSectionAttributes
+            && CGRectGetMinY(lastSectionAttributes.frame) != [_sectionDefaultYs[lastSectionAttributes.indexPath] floatValue]
+            && CGRectGetMaxY(lastSectionAttributes.frame) + offset >= CGRectGetMinY(supplementaryAttributes.frame)) {
+            
+            lastSectionAttributes.frame = CGRectMake(CGRectGetMinX(lastSectionAttributes.frame), CGRectGetMinY(supplementaryAttributes.frame) - offset - CGRectGetHeight(lastSectionAttributes.frame), CGRectGetWidth(lastSectionAttributes.frame), CGRectGetHeight(lastSectionAttributes.frame));
+            
+        }
+    } else {
+        supplementaryAttributes.frame = CGRectMake(0, _calculateHeight, size.width, size.height);
+    }
+    
+    [_sectionDefaultYs setObject:@(_calculateHeight) forKey:indexPath];
     _calculateHeight += size.height;
+    
     return supplementaryAttributes;
 }
 
@@ -419,6 +475,20 @@ const ZBCollectionViewLayoutTypeConfig ZBLayoutTypeConfigDefault = {ZBCollection
         return [self.delegate ZBSimpleCollectionViewLayoutDecorationKindAtSection:section];
     }
     return nil;
+}
+
+- (BOOL)ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:(NSInteger)section {
+    if (self.delegate && [self.delegate respondsToSelector:@selector(ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:)]) {
+        return [self.delegate ZBSimpleCollectionViewLayoutHeaderPinToTopAtSection:section];
+    }
+    return NO;
+}
+
+- (CGFloat)ZBSimpleCollectionViewLayoutHeaderPinToTopOffsetAtSection:(NSInteger)section {
+    if (self.delegate && [self.delegate respondsToSelector:@selector(ZBSimpleCollectionViewLayoutHeaderPinToTopOffsetAtSection:)]) {
+        return [self.delegate ZBSimpleCollectionViewLayoutHeaderPinToTopOffsetAtSection:section];
+    }
+    return 0;
 }
 
 @end
